@@ -1,25 +1,75 @@
 using System;
 using System.Net;
 using System.Text;
-using Oxide.Core;
+using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("PrometheusExporter", "j4fgames", "0.1.0")]
+    [Info("Prometheus Exporter", "j4fgames", "0.1.1")]
     [Description("Exposes Prometheus metrics endpoint")]
     class PrometheusExporter : RustPlugin
     {
         private HttpListener listener;
-        private const int MetricsPort = 9101;
-        
+        private Configuration config;
+
+        private class Configuration
+        {
+            [JsonProperty("Listening address")]
+            public string ListenAddress { get; set; } = "127.0.0.1";
+
+            [JsonProperty("Listening port")]
+            public int MetricsPort { get; set; } = 9101;
+        }
+
+        protected override void LoadConfig()
+        {
+            base.LoadConfig();
+            try
+            {
+                config = Config.ReadObject<Configuration>();
+            }
+            catch
+            {
+                PrintError("Configuration file is corrupt, creating new one!");
+                LoadDefaultConfig();
+            }
+            SaveConfig();
+        }
+
+        protected override void LoadDefaultConfig() => config = new Configuration();
+
+        protected override void SaveConfig() => Config.WriteObject(config, true);
+
         void OnServerInitialized()
         {
+            if (config.MetricsPort < 1 || config.MetricsPort > 65535)
+            {
+                PrintError($"Invalid port number: {config.MetricsPort}. Must be between 1 and 65535.");
+                return;
+            }
+
+            var address = config.ListenAddress?.Trim();
+            if (string.IsNullOrEmpty(address))
+            {
+                PrintError("Listening address is empty.");
+                return;
+            }
+
+            if (address == "0.0.0.0")
+                address = "+";
+
+            if (address != "+" && address != "*" && !IPAddress.TryParse(address, out _))
+            {
+                PrintError($"Invalid listening address: {config.ListenAddress}");
+                return;
+            }
+
             try
             {
                 listener = new HttpListener();
-                listener.Prefixes.Add($"http://+:{MetricsPort}/metrics/");
+                listener.Prefixes.Add($"http://{address}:{config.MetricsPort}/metrics/");
                 listener.Start();
-                Puts($"Prometheus metrics listening on port {MetricsPort}");
+                Puts($"Prometheus metrics listening on {address}:{config.MetricsPort}");
                 listener.BeginGetContext(HandleRequest, null);
             }
             catch (Exception ex)
