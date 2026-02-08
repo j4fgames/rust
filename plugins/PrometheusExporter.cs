@@ -5,7 +5,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("Prometheus Exporter", "j4fgames", "0.1.1")]
+    [Info("Prometheus Exporter", "j4fgames", "0.2.0")]
     [Description("Exposes Prometheus metrics endpoint")]
     class PrometheusExporter : RustPlugin
     {
@@ -125,16 +125,23 @@ namespace Oxide.Plugins
             sb.AppendLine("# TYPE rust_players_queued gauge");
             sb.AppendLine($"rust_players_queued {queued}");
             
-            // Per-player info
+            // Per-player metrics
             sb.AppendLine("# HELP rust_players_info Current players on the server");
             sb.AppendLine("# TYPE rust_players_info gauge");
+            sb.AppendLine("# HELP rust_players_connected_seconds Seconds each player has been connected");
+            sb.AppendLine("# TYPE rust_players_connected_seconds gauge");
+            sb.AppendLine("# HELP rust_players_ping_milliseconds Average ping per player in milliseconds");
+            sb.AppendLine("# TYPE rust_players_ping_milliseconds gauge");
             foreach (var player in BasePlayer.activePlayerList)
             {
                 var name = player.displayName.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n");
                 var steamId = player.UserIDString;
                 var ping = Network.Net.sv.GetAveragePing(player.net.connection);
                 var connectedSeconds = (int)player.net.connection.GetSecondsConnected();
-                sb.AppendLine($"rust_players_info{{player_name=\"{name}\",steam_id=\"{steamId}\",ping=\"{ping}\",connected_seconds=\"{connectedSeconds}\"}} 1");
+                var ip = player.net.connection.ipaddress.Split(':')[0];
+                sb.AppendLine($"rust_players_info{{player_name=\"{name}\",steam_id=\"{steamId}\",ip=\"{ip}\"}} 1");
+                sb.AppendLine($"rust_players_connected_seconds{{player_name=\"{name}\",steam_id=\"{steamId}\"}} {connectedSeconds}");
+                sb.AppendLine($"rust_players_ping_milliseconds{{player_name=\"{name}\",steam_id=\"{steamId}\"}} {ping}");
             }
 
             // Server info
